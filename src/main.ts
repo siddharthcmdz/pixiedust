@@ -1,6 +1,6 @@
 import $ from 'jquery';
 import { CheckWebGPU } from "./helper";
-import { Shaders } from './shaders';
+import { Shaders, ShaderPerVertexColor } from './shaders';
 // const isWebGPUsupported = CheckWebGPU()
 // const wgpuh2 = document.getElementById('id-gpu-check')
 // if(wgpuh2) {
@@ -26,7 +26,8 @@ const CreateTriangle = async (color='(1.0,1.0,1.0,1.0)') => {
         format: format,
     })
 
-    const shader = Shaders(color)
+    //const shader = Shaders(color)
+    const shader = ShaderPerVertexColor()
 
     const pipeline = device.createRenderPipeline({
         vertex: {
@@ -65,7 +66,7 @@ const CreateTriangle = async (color='(1.0,1.0,1.0,1.0)') => {
     device.queue.submit([commandEncoder.finish()])
 }
 
-$( document ).ready(function() {CreateTriangle() 
+$( document ).ready(function() {
     console.log( "ready!" );
     CreateTriangle()
 });
