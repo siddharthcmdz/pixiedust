@@ -22,6 +22,7 @@
   "dependencies": {
     "@types/jquery": "^3.5.10",
     "@types/node": "^16.11.12",
+    "@webgpu/glslang": "0.0.15",
     "@webgpu/types": "^0.1.9",
     "css-loader": "^6.5.1",
     "jquery": "^3.6.0",
