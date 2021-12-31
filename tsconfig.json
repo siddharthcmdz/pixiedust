@@ -11,7 +11,7 @@
       "node",
       "@webgpu/types"
     ],
-    "module": "es2015",
+    "module": "commonjs",
     "esModuleInterop": true,
     "strict": true,
     "sourceMap": true

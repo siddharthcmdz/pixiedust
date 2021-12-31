@@ -6,11 +6,15 @@ import {
   getShebang,
   updateBreak,
 } from "../node_modules/typescript/lib/typescript"
+import { CubeData } from "./cubedata"
 import {
   CheckWebGPU,
   CheckWGPUbrowserSupport,
   InitGPU,
   CreateGPUBuffer,
+  CreateGPUBufferUint,
+  CreateViewProjection,
+  CreateTransform,
 } from "./helper"
 import {
   Shaders,
@@ -19,7 +23,10 @@ import {
   LinePointPrimives,
   TriStrips,
   QuadBufferPerAttrib,
+  Cube3D,
 } from "./shaders"
+
+import { vec3, mat4 } from "gl-matrix"
 
 enum WebGPUShader {
   ColoredTriangle = 0,
@@ -28,6 +35,7 @@ enum WebGPUShader {
   PointLineStripPrimitive = 3,
   TriangleStripPrimitive = 4,
   QuadBufferPerAttrib = 5,
+  Cube3D = 6,
 }
 
 const getShader = (shaderEnum: WebGPUShader) => {
@@ -57,6 +65,11 @@ const getShader = (shaderEnum: WebGPUShader) => {
     case WebGPUShader.QuadBufferPerAttrib:
       console.log("Shader chosen: QuadBufferPerAttrib")
       shader = QuadBufferPerAttrib()
+      break
+
+    case WebGPUShader.Cube3D:
+      console.log("Shader chosen: Cube3D")
+      shader = Cube3D()
       break
 
     default:
@@ -270,40 +283,24 @@ const CreateTriStrip = async () => {
 const CreateQuadBufferPerAttrib = async () => {
   const gpu = await InitGPU()
   const device = gpu.device
-
+  //prettier-ignore
   const vertexData = new Float32Array([
-    -0.5,
-    -0.5, // vertex a
-    0.5,
-    -0.5, // vertex b
-    -0.5,
-    0.5, // vertex d
-    -0.5,
-    0.5, // vertex d
-    0.5,
-    -0.5, // vertex b
-    0.5,
-    0.5, // vertex c
+    -0.5, -0.5, // vertex a
+    0.5, -0.5, // vertex b
+    -0.5, 0.5, // vertex d
+    -0.5, 0.5, // vertex d
+    0.5, -0.5, // vertex b
+    0.5, 0.5, // vertex c
   ])
+
+  //prettier-ignore
   const colorData = new Float32Array([
-    1,
-    0,
-    0, // vertex a: red
-    0,
-    1,
-    0, // vertex b: green
-    1,
-    1,
-    0, // vertex d: yell  ow
-    1,
-    1,
-    0, // vertex d: yellow
-    0,
-    1,
-    0, // vertex b: green
-    0,
-    0,
-    1, // vertex c: blue
+    1, 0, 0, // vertex a: red
+    0, 1, 0, // vertex b: green
+    1, 1, 0, // vertex d: yell  ow
+    1, 1, 0, // vertex d: yellow
+    0, 1, 0, // vertex b: green
+    0, 0, 1, // vertex c: blue
   ])
 
   const vertexBuffer = CreateGPUBuffer(device, vertexData)
@@ -379,12 +376,313 @@ const CreateQuadBufferPerAttrib = async () => {
   device.queue.submit([commandEncoder.finish()])
 }
 
+const CreateQuadInSingleBuffer = async () => {
+  const gpu = await InitGPU()
+  const device = gpu.device
+
+  //prettier-ignore
+  const vertexData = new Float32Array([
+    -0.5,-0.5, 1, 0, 0, // vertex a: red
+    0.5, -0.5, 0, 1, 0, // vertex b: green
+    -0.5, 0.5, 1, 1, 0, // vertex d: yellow
+    -0.5, 0.5, 1, 1, 0, // vertex d: yellow
+    0.5, -0.5, 0, 1,0, // vertex b: green
+    0.5, 0.5, 0, 0, 1, // vertex c: blue
+  ])
+
+  const vertexBuffer = CreateGPUBuffer(device, vertexData)
+
+  const shaderEnum = WebGPUShader.QuadBufferPerAttrib
+  const shader = getShader(shaderEnum)
+
+  const pipeline = device.createRenderPipeline({
+    vertex: {
+      module: device.createShaderModule({
+        code: shader.vertex,
+      }),
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 4 * (2 + 3),
+          attributes: [
+            {
+              shaderLocation: 0,
+              format: "float32x2",
+              offset: 0,
+            },
+            {
+              shaderLocation: 1,
+              format: "float32x3",
+              offset: 8,
+            },
+          ],
+        },
+      ],
+    },
+
+    fragment: {
+      module: device.createShaderModule({
+        code: shader.fragment,
+      }),
+      entryPoint: "main",
+      targets: [
+        {
+          format: gpu.format as GPUTextureFormat,
+        },
+      ],
+    },
+    primitive: {
+      topology: "triangle-list",
+    },
+  })
+
+  const commandEncoder = device.createCommandEncoder()
+  const textureView = gpu.context.getCurrentTexture().createView()
+  const renderpass = commandEncoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: textureView,
+        loadValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+        storeOp: "store",
+      },
+    ],
+  })
+
+  renderpass.setPipeline(pipeline)
+  renderpass.setVertexBuffer(0, vertexBuffer)
+  renderpass.draw(6)
+  renderpass.endPass()
+
+  device.queue.submit([commandEncoder.finish()])
+}
+
+const CreateQuadInSingleBufferWithIndexBuffer = async () => {
+  const gpu = await InitGPU()
+  const device = gpu.device
+
+  //prettier-ignore
+  const vertexData = new Float32Array([
+    -0.5, -0.5, 1, 0, 0, // vertex a: red
+    0.5, -0.5, 0, 1, 0, // vertex b: green
+    -0.5, 0.5, 1, 1, 0, // vertex d: yellow
+    -0.5, 0.5, 1, 1, 0, // vertex d: yellow
+    0.5, -0.5, 0, 1, 0, // vertex b: green
+    0.5, 0.5, 0, 0, 1, // vertex c: blue
+  ])
+  const vertexBuffer = CreateGPUBuffer(device, vertexData)
+
+  const indexData = new Uint32Array([0, 1, 3, 3, 1, 2])
+  const indexBuffer = CreateGPUBufferUint(device, indexData)
+
+  const shaderEnum = WebGPUShader.QuadBufferPerAttrib
+  const shader = getShader(shaderEnum)
+
+  const pipeline = device.createRenderPipeline({
+    vertex: {
+      module: device.createShaderModule({
+        code: shader.vertex,
+      }),
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 4 * (2 + 3),
+          attributes: [
+            {
+              shaderLocation: 0,
+              format: "float32x2",
+              offset: 0,
+            },
+            {
+              shaderLocation: 1,
+              format: "float32x3",
+              offset: 8,
+            },
+          ],
+        },
+      ],
+    },
+
+    fragment: {
+      module: device.createShaderModule({
+        code: shader.fragment,
+      }),
+      entryPoint: "main",
+      targets: [
+        {
+          format: gpu.format as GPUTextureFormat,
+        },
+      ],
+    },
+    primitive: {
+      topology: "triangle-list",
+    },
+  })
+
+  const commandEncoder = device.createCommandEncoder()
+  const textureView = gpu.context.getCurrentTexture().createView()
+  const renderpass = commandEncoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: textureView,
+        loadValue: { r: 0.5, g: 0.5, b: 0.5, a: 1.0 },
+        storeOp: "store",
+      },
+    ],
+  })
+
+  renderpass.setPipeline(pipeline)
+  renderpass.setVertexBuffer(0, vertexBuffer)
+  renderpass.setIndexBuffer(indexBuffer, "uint32")
+  renderpass.draw(6)
+  renderpass.endPass()
+
+  device.queue.submit([commandEncoder.finish()])
+}
+
+const CreateCube = async () => {
+  const gpu = await InitGPU()
+  const device = gpu.device
+
+  //create vertex buffers
+  const cubedata = CubeData()
+  const numVertices = cubedata.positions.length / 3
+  const vertexBuffer = CreateGPUBuffer(device, cubedata.positions)
+  const colorBuffer = CreateGPUBuffer(device, cubedata.colors)
+
+  const shaderEnum = WebGPUShader.Cube3D
+  const shader = getShader(shaderEnum)
+  const pipeline = device.createRenderPipeline({
+    vertex: {
+      module: device.createShaderModule({
+        code: shader.vertex,
+      }),
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 0,
+              format: "float32x3",
+              offset: 0,
+            },
+          ],
+        },
+        {
+          arrayStride: 12,
+          attributes: [
+            {
+              shaderLocation: 1,
+              format: "float32x3",
+              offset: 0,
+            },
+          ],
+        },
+      ],
+    },
+
+    fragment: {
+      module: device.createShaderModule({
+        code: shader.fragment,
+      }),
+      entryPoint: "main",
+      targets: [
+        {
+          format: gpu.format as GPUTextureFormat,
+        },
+      ],
+    },
+    primitive: {
+      topology: "triangle-list",
+      cullMode: "back",
+    },
+
+    depthStencil: {
+      format: "depth24plus",
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  })
+
+  //create uniform data
+  let vpMatrix = mat4.create()
+  const vp = CreateViewProjection(gpu.canvas.width / gpu.canvas.height)
+  vpMatrix = vp.viewProjectionMatrix
+
+  const uniformBuffer = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  })
+
+  const uniformBindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+      {
+        binding: 0,
+        resource: {
+          buffer: uniformBuffer,
+          offset: 0,
+          size: 64,
+        },
+      },
+    ],
+  })
+
+  const textureView = gpu.context.getCurrentTexture().createView()
+  console.log(`depthTexture size: ${gpu.canvas.width}, ${gpu.canvas.height}`)
+  const depthTexture = device.createTexture({
+    size: [gpu.canvas.width, gpu.canvas.height, 1],
+    format: "depth24plus",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  })
+
+  console.log(`depthTexture label: ${depthTexture.label}`)
+
+  const renderPassDescription = {
+    colorAttachments: [
+      {
+        view: textureView,
+        loadValue: { r: 0.5, g: 0.5, b: 0.8, a: 1.0 }, //background color
+        storeOp: "store",
+      },
+    ],
+    depthStencilAttachment: {
+      view: depthTexture.createView(),
+      depthLoadValue: 1.0,
+      depthStoreOp: "store",
+      stencilLoadValue: 0,
+      stencilStoreOp: "store",
+    },
+  }
+
+  const modelMatrix = mat4.create()
+  const mvpMatrix = mat4.create()
+  CreateTransform(modelMatrix)
+  mat4.multiply(mvpMatrix, vpMatrix, modelMatrix)
+  device.queue.writeBuffer(uniformBuffer, 0, mvpMatrix as ArrayBuffer)
+
+  const commandEncoder = device.createCommandEncoder()
+  const renderPass = commandEncoder.beginRenderPass(
+    renderPassDescription as GPURenderPassDescriptor
+  )
+  renderPass.setPipeline(pipeline)
+  renderPass.setVertexBuffer(0, vertexBuffer)
+  renderPass.setVertexBuffer(1, colorBuffer)
+  renderPass.setBindGroup(0, uniformBindGroup)
+  renderPass.draw(numVertices)
+  renderPass.endPass()
+
+  device.queue.submit([commandEncoder.finish()])
+}
+
 $(document).ready(function () {
   console.log("ready!")
   // CreateTriangle()
   // CreatePointLinePrimitive(false)
   // CreateTriStrip()
-  CreateQuadBufferPerAttrib()
+  // CreateQuadBufferPerAttrib()
+  // CreateQuadInSingleBuffer()
+  CreateCube()
 })
 
 // $('#id-btn').on('click', ()=>{

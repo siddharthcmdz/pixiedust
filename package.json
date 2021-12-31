@@ -25,6 +25,7 @@
     "@webgpu/glslang": "0.0.15",
     "@webgpu/types": "^0.1.9",
     "css-loader": "^6.5.1",
+    "gl-matrix": "^3.4.3",
     "jquery": "^3.6.0",
     "ts-loader": "^9.2.6",
     "typescript": "^4.5.3",
