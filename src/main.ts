@@ -15,6 +15,7 @@ import {
   CreateGPUBufferUint,
   CreateViewProjection,
   CreateTransform,
+  CreateAnimation,
 } from "./helper"
 import {
   Shaders,
@@ -27,6 +28,7 @@ import {
 } from "./shaders"
 
 import { vec3, mat4 } from "gl-matrix"
+const createCamera = require("3d-view-controls")
 
 enum WebGPUShader {
   ColoredTriangle = 0,
@@ -606,8 +608,12 @@ const CreateCube = async () => {
 
   //create uniform data
   let vpMatrix = mat4.create()
+  let vMatrix = mat4.create()
   const vp = CreateViewProjection(gpu.canvas.width / gpu.canvas.height)
   vpMatrix = vp.viewProjectionMatrix
+
+  let rotation = vec3.fromValues(0, 0, 0)
+  let camera = createCamera(gpu.canvas, vp.cameraOption)
 
   const uniformBuffer = device.createBuffer({
     size: 64,
@@ -628,7 +634,7 @@ const CreateCube = async () => {
     ],
   })
 
-  const textureView = gpu.context.getCurrentTexture().createView()
+  let textureView = gpu.context.getCurrentTexture().createView()
   console.log(`depthTexture size: ${gpu.canvas.width}, ${gpu.canvas.height}`)
   const depthTexture = device.createTexture({
     size: [gpu.canvas.width, gpu.canvas.height, 1],
@@ -655,24 +661,38 @@ const CreateCube = async () => {
     },
   }
 
+  const doAnimate = true
   const modelMatrix = mat4.create()
   const mvpMatrix = mat4.create()
-  CreateTransform(modelMatrix)
-  mat4.multiply(mvpMatrix, vpMatrix, modelMatrix)
-  device.queue.writeBuffer(uniformBuffer, 0, mvpMatrix as ArrayBuffer)
+  function draw() {
+    if (!doAnimate) {
+      if (camera.tick()) {
+        const pMatrix = vp.viewProjectionMatrix
+        vMatrix = camera.matrix
+        mat4.multiply(vpMatrix, pMatrix, vMatrix)
+      }
+    }
 
-  const commandEncoder = device.createCommandEncoder()
-  const renderPass = commandEncoder.beginRenderPass(
-    renderPassDescription as GPURenderPassDescriptor
-  )
-  renderPass.setPipeline(pipeline)
-  renderPass.setVertexBuffer(0, vertexBuffer)
-  renderPass.setVertexBuffer(1, colorBuffer)
-  renderPass.setBindGroup(0, uniformBindGroup)
-  renderPass.draw(numVertices)
-  renderPass.endPass()
+    CreateTransform(modelMatrix, [0, 0, 0], rotation)
+    mat4.multiply(mvpMatrix, vpMatrix, modelMatrix)
+    device.queue.writeBuffer(uniformBuffer, 0, mvpMatrix as ArrayBuffer)
+    textureView = gpu.context.getCurrentTexture().createView()
+    renderPassDescription.colorAttachments[0].view = textureView
+    const commandEncoder = device.createCommandEncoder()
+    const renderPass = commandEncoder.beginRenderPass(
+      renderPassDescription as GPURenderPassDescriptor
+    )
+    renderPass.setPipeline(pipeline)
+    renderPass.setVertexBuffer(0, vertexBuffer)
+    renderPass.setVertexBuffer(1, colorBuffer)
+    renderPass.setBindGroup(0, uniformBindGroup)
+    renderPass.draw(numVertices)
+    renderPass.endPass()
 
-  device.queue.submit([commandEncoder.finish()])
+    device.queue.submit([commandEncoder.finish()])
+  }
+
+  CreateAnimation(draw, rotation, doAnimate)
 }
 
 $(document).ready(function () {

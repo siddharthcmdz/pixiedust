@@ -1,4 +1,5 @@
 import { vec3, mat4 } from "gl-matrix"
+import { request } from "http"
 
 export const CheckWebGPU = () => {
   let result = "Great, your current browser supports WebGPU!"
@@ -135,4 +136,21 @@ export const CreateViewProjection = (
     viewProjectionMatrix,
     cameraOption,
   }
+}
+
+//prettier-ignore
+export const CreateAnimation = (draw: any, rotation: vec3 = vec3.fromValues(0, 0, 0), isAnimation = true) => {
+  function step() {
+    if (isAnimation) {
+      rotation[0] += 0.01
+      rotation[1] += 0.01
+      rotation[2] += 0.01
+    } else {
+      rotation = [0, 0, 0]
+    }
+    draw()
+    requestAnimationFrame(step)
+  }
+
+  requestAnimationFrame(step)
 }

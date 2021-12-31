@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/siddharthcmdz/pixiedust#readme",
   "dependencies": {
+    "3d-view-controls": "^2.2.2",
     "@types/jquery": "^3.5.10",
     "@types/node": "^16.11.12",
     "@webgpu/glslang": "0.0.15",
